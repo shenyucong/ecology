@@ -37,6 +37,8 @@ def deepnn(images):
     W_conv1 = weight_variable([5, 5, 1, 32])
     b_conv1 = bias_variable([32])
     h_conv1 = tf.nn.relu(conv2d(images, W_conv1) + b_conv1)
+    tf.summary.histogram("weights", W_conv1)
+    tf.summary.histogram("biases", b_conv1)
 
   # Pooling layer - downsamples by 2X.
   with tf.name_scope('pool1'):
@@ -47,6 +49,8 @@ def deepnn(images):
     W_conv2 = weight_variable([5, 5, 32, 64])
     b_conv2 = bias_variable([64])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+    tf.summary.histogram("weights", W_conv2)
+    tf.summary.histogram("biases", b_conv2)
 
   # Second pooling layer.
   with tf.name_scope('pool2'):
@@ -60,6 +64,10 @@ def deepnn(images):
 
     h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    tf.summary.histogram("weights", W_fc1)
+    tf.summary.histogram("biases", b_fc1)
+    embedding_input = h_fc1
+    tf.summary.histogram("fc1/relu", h_fc1)
 
   # Dropout - controls the complexity of the model, prevents co-adaptation of
   # features.
@@ -73,6 +81,8 @@ def deepnn(images):
     b_fc2 = bias_variable([18])
 
     y_conv = tf.matmul(h_fc1, W_fc2) + b_fc2
+    tf.summary.histogram("weights", W_fc2)
+    tf.summary.histogram("biases", b_fc2)
   return y_conv, keep_prob
 
 
@@ -90,13 +100,13 @@ def max_pool_2x2(x):
 def weight_variable(shape):
   """weight_variable generates a weight variable of a given shape."""
   initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
+  return tf.Variable(initial, name = "W")
 
 
 def bias_variable(shape):
   """bias_variable generates a bias variable of a given shape."""
   initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
+  return tf.Variable(initial, name = "B")
 
 
 def read_and_decode(filename_queue):

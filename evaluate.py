@@ -3,22 +3,23 @@ import os.path
 
 import numpy as np
 import tensorflow as tf
+import training_bee
 import math
 import tool
 
 tfrecords_file_test = 'bees_test.tfrecords'
-train_dir = '/Users/hai_phan/Desktop/yucongshen/ecology/'
-log_dir = '/Users/hai_phan/Desktop/yucongshen/ecology/log/'
+train_dir = '/Users/chenyucong/Desktop/research/ecology'
+log_dir = ''
 
 filename = os.path.join(train_dir, tfrecords_file_test)
 with tf.name_scope('input'):
     filename_queue = tf.train.string_input_producer([filename])
-    images_test, label_test = tool.read_and_decode(filename_queue)
+    images_test, label_test = training_bee.read_and_decode(filename_queue)
 
-    images_test_batch, label_test_batch = tf.train.batch([images_test, label_test], batch_size = 15, num_threads=1, capacity=1000+3*15)
+    images_test_batch, label_test_batch = tf.train.batch([images_test, label_test], batch_size = 15, num_threads=1, capacity=1000+3*25)
 
-y_conv, keep_prob = tool.deepnn(images_test_batch)
-correct = tool.num_correct_prediction(y_conv, label_test_batch)
+y_conv, keep_prob = tool.deepnn(images_test)
+correct = tool.num_correct_prediction(y_conv, label_test)
 saver = tf.train.Saver(tf.global_variables())
 with tf.Session() as sess:
     print("Reading checkpoints...")
@@ -29,6 +30,7 @@ with tf.Session() as sess:
         print('Loading success, global_step is %s' % global_step)
     else:
         print('No checkpoint file found')
+        return
 
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess = sess, coord = coord)
