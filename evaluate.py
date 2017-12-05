@@ -5,16 +5,7 @@ import numpy as np
 import tensorflow as tf
 import training_bee
 import math
-
-def num_correct_prediction(logits, labels):
-    """Evaluate the quality of the logits at predicting the label.
-    Return:
-        the number of correct predictions
-    """
-    correct = tf.equal(tf.arg_max(logits, 1), tf.arg_max(labels, 1))
-    correct = tf.cast(correct, tf.int32)
-    n_correct = tf.reduce_sum(correct)
-    return n_correct
+import tool
 
 tfrecords_file_test = 'bees_test.tfrecords'
 train_dir = '/Users/chenyucong/Desktop/research/ecology'
@@ -27,8 +18,8 @@ with tf.name_scope('input'):
 
     images_test_batch, label_test_batch = tf.train.batch([images_test, label_test], batch_size = 15, num_threads=1, capacity=1000+3*25)
 
-y_conv, keep_prob = deepnn(images_test)
-correct = num_correct_prediction(y_conv, label_test)
+y_conv, keep_prob = tool.deepnn(images_test)
+correct = tool.num_correct_prediction(y_conv, label_test)
 saver = tf.train.Saver(tf.global_variables())
 with tf.Session() as sess:
     print("Reading checkpoints...")
