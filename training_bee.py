@@ -96,16 +96,21 @@ def read_and_decode(filename_queue):
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
     features = tf.parse_single_example(serialized_example, features={
+        'height': tf.FixedLenFeature([], tf.int64),
+        'width': tf.FixedLenFeature([], tf.int64),
         'image_raw': tf.FixedLenFeature([], tf.string),
         'label': tf.FixedLenFeature([], tf.int64),
         })
 
     image = tf.decode_raw(features['image_raw'], tf.uint8)
-    image = tf.reshape(image, [256, 256])
+    height = tf.cast(features['height'], tf.int32)
+    width = tf.cast(features['width'], tf.int32)
+    image = tf.reshape(image, [height, width])
     image = tf.cast(image, tf.float32) * (1. / 255) - 0.5
     label = tf.cast(features['label'], tf.int32)
     image = tf.expand_dims(image, -1)
-    image = tf.image.resize_images(image, [28, 28])
+    image = tf.image.resize_images(image, (28, 28))
+    label = tf.one_hot(tf.cast(label, tf.int32), depth = 18)
 
     return image, label
 
@@ -119,13 +124,13 @@ train_dir = '/Users/chenyucong/Desktop/research/ecology/'
 filename = os.path.join(train_dir, tfrecords_file_train)
 filename_test = os.path.join(train_dir, tfrecords_file_test)
 with tf.name_scope('input'):
-    filename_queue = tf.train.string_input_producer([filename], num_epochs=3)
-    filename_queue_test = tf.train.string_input_producer([filename_test], num_epochs = 3)
+    filename_queue = tf.train.string_input_producer([filename])
+    #filename_queue_test = tf.train.string_input_producer([filename_test], num_epochs = 3)
     images, label = read_and_decode(filename_queue)
-    images_test, label_test = read_and_decode(filename_queue_test)
+    #images_test, label_test = read_and_decode(filename_queue_test)
 
-    images, label = tf.train.batch([images, label], batch_size=25, num_threads=64,capacity=1000 + 3 * 25)
-    images_test, label_test = tf.train.batch([images_test, label_test], batch_size = 15, num_threads = 64, capacity = 1000+3*15)
+    images_batch, label_batch = tf.train.shuffle_batch([images, label], batch_size=25, num_threads=1,capacity=1000 + 3 * 25, min_after_dequeue = 1000)
+    #images_test, label_test = tf.train.batch([images_test, label_test], batch_size = 15, num_threads = 64, capacity = 1000+3*15)
 
 #filename_test = os.path.join(train_dir, tfrecords_file_train)
 #images_test, label_test = read_and_decode(filename_test)
@@ -151,25 +156,31 @@ with tf.name_scope('accuracy'):
   correct_prediction = tf.cast(correct_prediction, tf.float32)
 accuracy = tf.reduce_mean(correct_prediction)
 
-graph_location = tempfile.mkdtemp()
-print('Saving graph to: %s' % graph_location)
-train_writer = tf.summary.FileWriter(graph_location)
-train_writer.add_graph(tf.get_default_graph())
+#graph_location = tempfile.mkdtemp()
+#print('Saving graph to: %s' % graph_location)
+#train_writer = tf.summary.FileWriter(graph_location)
+#train_writer.add_graph(tf.get_default_graph())
 
 with tf.Session() as sess:
+  sess.run(tf.global_variables_initializer())
   coord = tf.train.Coordinator()
   threads = tf.train.start_queue_runners(coord=coord)
-  sess.run(tf.global_variables_initializer())
-  for i in range(20000):
-    images, label = sess.run([images, label])
-    images_test, label_test = sess.run([images_test, label_test])
-    if i % 100 == 0:
-        train_accuracy = accuracy.eval(feed_dict={x: images, y_: label, keep_prob: 1.0})
-        print('step %d, training accuracy %.4f' % (i, train_accuracy))
-    train_step.run(feed_dict={x: images, y_: label, keep_prob: 0.5})
+  try:
+      for i in range(20000):
+          images, label = sess.run([images_batch, label_batch])
+          #print(images, label)
+          #images_test, label_test = sess.run([images_test, label_test])
+          if i % 100 == 0:
+              train_accuracy = accuracy.eval(feed_dict={x: images, y_: label, keep_prob: 1.0})
+              print('step %d, training accuracy %.4f' % (i, train_accuracy))
+          train_step.run(feed_dict={x: images, y_: label, keep_prob: 0.5})
+  except tf.errors.OutOfRangeError:
+      print('Done training -- epoch limit reached')
+  finally:
+      coord.request_stop()
 
-    print('test accuracy %.4f' % accuracy.eval(feed_dict={
-        x: images_test, y_: label_test, keep_prob: 1.0}))
+    #print('test accuracy %.4f' % accuracy.eval(feed_dict={
+    #    x: images_test, y_: label_test, keep_prob: 1.0}))
 
   coord.request_stop()
   coord.join(threads)
