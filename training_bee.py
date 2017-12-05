@@ -16,8 +16,8 @@ FLAGS = None
 # Import data
 tfrecords_file_train = 'bees_train.tfrecords'
 tfrecords_file_test = 'bees_test.tfrecords'
-train_dir = '/Users/chenyucong/Desktop/research/ecology/'
-train_log_dir = '/Users/chenyucong/Desktop/research/ecology/log/'
+train_dir = '/Users/hai_phan/Desktop/yucongshen/ecology/'
+train_log_dir = '/Users/hai_phan/Desktop/yucongshen/ecology/log'
 
 filename = os.path.join(train_dir, tfrecords_file_train)
 #filename_test = os.path.join(train_dir, tfrecords_file_test)
@@ -47,7 +47,7 @@ with tf.name_scope('loss'):
 cross_entropy = tf.reduce_mean(cross_entropy)
 
 with tf.name_scope('adam_optimizer'):
-  train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+  train_step = tf.train.AdamOptimizer(1e-6).minimize(cross_entropy)
 
 with tf.name_scope('accuracy'):
   correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
@@ -77,7 +77,8 @@ with tf.Session() as sess:
               print('step %d, training accuracy %.4f' % (i, train_accuracy))
               #test_accuracy = accuracy.eval(feed_dict={x: images_test, y_: label_test, keep_prob: 1.0})
           _, tra_loss = sess.run([train_step, cross_entropy], feed_dict={x: images, y_: label})
-          print('step %d, loss %.4f' %(i, tra_loss))
+          if i % 100 == 0:
+              print('step %d, loss %.4f' %(i, tra_loss))
           if i % 2000 == 0 or (i + 1) == 20000:
               checkpoint_path = os.path.join(train_log_dir, 'model.ckpt')
               saver.save(sess, checkpoint_path, global_step=i)
