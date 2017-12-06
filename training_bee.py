@@ -151,7 +151,6 @@ summ = tf.summary.merge_all()
 #train_writer.add_graph(tf.get_default_graph())
 
 saver = tf.train.Saver(tf.global_variables())
-
 with tf.Session() as sess:
   sess.run(tf.global_variables_initializer())
   coord = tf.train.Coordinator()
@@ -159,18 +158,17 @@ with tf.Session() as sess:
   tra_summary_writer = tf.summary.FileWriter(train_log_dir)
   tra_summary_writer.add_graph(sess.graph)
   try:
-      for i in range(20000):
+      for i in range(1000):
           images, label = sess.run([images_batch, label_batch])
           #images_test, label_test = sess.run([images_test_batch, label_test_batch])
           #print(images, label)
           #images_test, label_test = sess.run([images_test, label_test])
           if i % 100 == 0:
               train_accuracy = accuracy.eval(feed_dict={x: images, y_: label, keep_prob: 1.0})
-              s = sess.run(summ, feed_dict={x: images, y_: label})
-              tra_summary_writer.add_summary(s, i)
               print('step %d, training accuracy %.4f' % (i, train_accuracy))
               #test_accuracy = accuracy.eval(feed_dict={x: images_test, y_: label_test, keep_prob: 1.0})
-          _, tra_loss = sess.run([train_step, cross_entropy], feed_dict={x: images, y_: label})
+          _, tra_loss, summary = sess.run([train_step, cross_entropy, summ], feed_dict={x: images, y_: label})
+          tra_summary_writer.add_summary(summary, i)
           if i % 100 == 0:
               print('step %d, loss %.4f' %(i, tra_loss))
           if i % 2000 == 0 or (i + 1) == 20000:
