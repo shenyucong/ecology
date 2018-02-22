@@ -36,10 +36,10 @@ x = tf.placeholder(tf.float32, [None, 28, 28, 1], name = "x")
 tf.summary.image('input', x, 3)
 
   # Define loss and optimizer
-y_ = tf.placeholder(tf.float32, [None, 18], name = "labels")
+y_ = tf.placeholder(tf.float32, [None, 19], name = "labels")
 
   # Build the graph for the deep net
-y_conv = vgg.VGG16(x, 18, True)
+y_conv = vgg.VGG16(x, 19, True)
 
 with tf.name_scope('loss'):
   cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=y_,
