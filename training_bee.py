@@ -68,8 +68,8 @@ def deepnn(images):
 
   # Map the 1024 features to 10 classes, one for each digit
   with tf.name_scope('fc2'):
-    W_fc2 = weight_variable([1024, 18])
-    b_fc2 = bias_variable([18])
+    W_fc2 = weight_variable([1024, 19])
+    b_fc2 = bias_variable([19])
 
     y_conv = tf.matmul(h_fc1, W_fc2) + b_fc2
     tf.summary.histogram("weights", W_fc2)
@@ -123,7 +123,7 @@ x = tf.placeholder(tf.float32, [None, 28, 28, 1], name = "x")
 tf.summary.image('input', x, 3)
 
   # Define loss and optimizer
-y_ = tf.placeholder(tf.float32, [None, 18], name = "labels")
+y_ = tf.placeholder(tf.float32, [None, 19], name = "labels")
 
   # Build the graph for the deep net
 y_conv, keep_prob = deepnn(x)
