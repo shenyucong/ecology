@@ -34,8 +34,8 @@ def deepnn(images):
 
   # First convolutional layer - maps one grayscale image to 32 feature maps.
   with tf.name_scope('conv1'):
-    W_conv1 = weight_variable([5, 5, 1, 32])
-    b_conv1 = bias_variable([32])
+    W_conv1 = weight_variable([5, 5, 1, 64])
+    b_conv1 = bias_variable([64])
     h_conv1 = tf.nn.relu(conv2d(images, W_conv1) + b_conv1)
     tf.summary.histogram("weights", W_conv1)
     tf.summary.histogram("biases", b_conv1)
@@ -46,8 +46,8 @@ def deepnn(images):
 
   # Second convolutional layer -- maps 32 feature maps to 64.
   with tf.name_scope('conv2'):
-    W_conv2 = weight_variable([5, 5, 32, 64])
-    b_conv2 = bias_variable([64])
+    W_conv2 = weight_variable([5, 5, 64, 128])
+    b_conv2 = bias_variable([128])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
     tf.summary.histogram("weights", W_conv2)
     tf.summary.histogram("biases", b_conv2)
@@ -59,10 +59,10 @@ def deepnn(images):
   # Fully connected layer 1 -- after 2 round of downsampling, our 28x28 image
   # is down to 7x7x64 feature maps -- maps this to 1024 features.
   with tf.name_scope('fc1'):
-    W_fc1 = weight_variable([7 * 7 * 64, 1024])
-    b_fc1 = bias_variable([1024])
+    W_fc1 = weight_variable(28 * 28 * 128, 4096])
+    b_fc1 = bias_variable([4096])
 
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 28*28*128])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
     tf.summary.histogram("weights", W_fc1)
     tf.summary.histogram("biases", b_fc1)
@@ -77,8 +77,8 @@ def deepnn(images):
 
   # Map the 1024 features to 10 classes, one for each digit
   with tf.name_scope('fc2'):
-    W_fc2 = weight_variable([1024, 18])
-    b_fc2 = bias_variable([18])
+    W_fc2 = weight_variable([4096, 19])
+    b_fc2 = bias_variable([19])
 
     y_conv = tf.matmul(h_fc1, W_fc2) + b_fc2
     tf.summary.histogram("weights", W_fc2)
@@ -109,7 +109,8 @@ def bias_variable(shape):
   return tf.Variable(initial, name = "B")
 
 
-def read_and_decode(filename_queue):
+def read_and_decode(tfrecords_file, batch_size):
+    filename_queue = tf.train.string_input_producer([tfrecords_file])
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
     features = tf.parse_single_example(serialized_example, features={
@@ -126,7 +127,79 @@ def read_and_decode(filename_queue):
     image = tf.cast(image, tf.float32) * (1. / 255) - 0.5
     label = tf.cast(features['label'], tf.int32)
     image = tf.expand_dims(image, -1)
-    image = tf.image.resize_images(image, (28, 28))
-    label = tf.one_hot(tf.cast(label, tf.int32), depth = 18)
+    image = tf.image.resize_images(image, (112, 112))
+    label = tf.one_hot(tf.cast(label, tf.int32), depth = 19)
+    image_batch, label_batch = tf.train.shuffle_batch([image, label],batch_size= batch_size,num_threads= 64, capacity = 20000, min_after_dequeue = 3000)
 
-    return image, label
+    return image_batch, label_batch
+
+def load_with_skip(data_path, session, skip_layer):
+    data_dict = np.load(data_path, encoding='latin1').item()
+    for key in data_dict:
+        if key not in skip_layer:
+            with tf.variable_scope(key, reuse=True):
+                for subkey, data in zip(('weights', 'biases'), data_dict[key]):
+                    session.run(tf.get_variable(subkey).assign(data))
+
+
+
+
+def conv(layer_name, x, out_channels, kernel_size=[3,3], stride=[1,1,1,1], is_pretrain=True):
+    in_channels = x.get_shape()[-1]
+    with tf.variable_scope(layer_name):
+        w = tf.get_variable(name='weights',
+                            trainable=is_pretrain,
+                            shape=[kernel_size[0], kernel_size[1], in_channels, out_channels],
+                            initializer=tf.contrib.layers.xavier_initializer())
+        b = tf.get_variable(name='biases',
+                            trainable=is_pretrain,
+                            shape=[out_channels],
+                            initializer=tf.constant_initializer(0.0))
+        x = tf.nn.conv2d(x, w, stride, padding='SAME', name='conv')
+        x = tf.nn.bias_add(x, b, name='bias_add')
+        x = tf.nn.relu(x, name='relu')
+        tf.summary.histogram("weights", w)
+        tf.summary.histogram("biases", b)
+        tf.summary.histogram("activate", x)
+        return x
+
+def pool(layer_name, x, kernel=[1,2,2,1], stride=[1,2,2,1], is_max_pool=True):
+    if is_max_pool:
+        x = tf.nn.max_pool(x, kernel, strides=stride, padding='SAME', name=layer_name)
+    else:
+        x = tf.nn.avg_pool(x, kernel, strides=stride, padding='SAME', name=layer_name)
+    return x
+
+def batch_norm(x):
+    epsilon = 1e-3
+    batch_mean, batch_var = tf.nn.moments(x, [0])
+    x = tf.nn.batch_normalization(x,
+                                  mean=batch_mean,
+                                  variance=batch_var,
+                                  offset=None,
+                                  scale=None,
+                                  variance_epsilon=epsilon)
+    return x
+
+def FC_layer(layer_name, x, out_nodes):
+    shape = x.get_shape()
+    if len(shape) == 4:
+        size = shape[1].value * shape[2].value * shape[3].value
+    else:
+        size = shape[-1].value
+
+    with tf.variable_scope(layer_name):
+        w = tf.get_variable('weights',
+                            shape=[size, out_nodes],
+                            initializer=tf.contrib.layers.xavier_initializer())
+        b = tf.get_variable('biases',
+                            shape=[out_nodes],
+                            initializer=tf.constant_initializer(0.0))
+        flat_x = tf.reshape(x, [-1, size])
+        x = tf.nn.bias_add(tf.matmul(flat_x, w), b)
+        x = tf.nn.relu(x)
+        tf.summary.histogram("weights", w)
+        tf.summary.histogram("biases", b)
+        tf.summary.histogram("activate", x)
+        return x
+

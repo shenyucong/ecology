@@ -8,6 +8,8 @@ import tempfile
 import os.path
 import time
 import tool
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 import tensorflow as tf
 
@@ -26,8 +28,8 @@ def deepnn(images):
 
   # First convolutional layer - maps one grayscale image to 32 feature maps.
   with tf.name_scope('conv1'):
-    W_conv1 = weight_variable([5, 5, 1, 32])
-    b_conv1 = bias_variable([32])
+    W_conv1 = weight_variable([5, 5, 1, 64])
+    b_conv1 = bias_variable([64])
     h_conv1 = tf.nn.relu(conv2d(images, W_conv1) + b_conv1)
     tf.summary.histogram("weights", W_conv1)
     tf.summary.histogram("biases", b_conv1)
@@ -38,8 +40,8 @@ def deepnn(images):
 
   # Second convolutional layer -- maps 32 feature maps to 64.
   with tf.name_scope('conv2'):
-    W_conv2 = weight_variable([5, 5, 32, 64])
-    b_conv2 = bias_variable([64])
+    W_conv2 = weight_variable([5, 5, 64, 128])
+    b_conv2 = bias_variable([128])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
     tf.summary.histogram("weights", W_conv2)
     tf.summary.histogram("biases", b_conv2)
@@ -51,10 +53,10 @@ def deepnn(images):
   # Fully connected layer 1 -- after 2 round of downsampling, our 28x28 image
   # is down to 7x7x64 feature maps -- maps this to 1024 features.
   with tf.name_scope('fc1'):
-    W_fc1 = weight_variable([7 * 7 * 64, 1024])
-    b_fc1 = bias_variable([1024])
+    W_fc1 = weight_variable([28 * 28 * 128, 4096])
+    b_fc1 = bias_variable([4096])
 
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 28*28*128])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
     tf.summary.histogram("weights", W_fc1)
     tf.summary.histogram("biases", b_fc1)
@@ -68,7 +70,7 @@ def deepnn(images):
 
   # Map the 1024 features to 10 classes, one for each digit
   with tf.name_scope('fc2'):
-    W_fc2 = weight_variable([1024, 19])
+    W_fc2 = weight_variable([4096, 19])
     b_fc2 = bias_variable([19])
 
     y_conv = tf.matmul(h_fc1, W_fc2) + b_fc2
@@ -102,24 +104,23 @@ def bias_variable(shape):
 # Import data
 tfrecords_file_train = 'bees_train.tfrecords'
 tfrecords_file_test = 'bees_test.tfrecords'
-train_dir = '/Users/chenyucong/Desktop/research/ecology/'
-train_log_dir = '/Users/chenyucong/Desktop/research/ecology/log/'
+train_dir = '/data/shaobo/Data2/'
+train_log_dir = '/data/shaobo/Data2/log/'
 
 filename = os.path.join(train_dir, tfrecords_file_train)
 #filename_test = os.path.join(train_dir, tfrecords_file_test)
 with tf.name_scope('input'):
-    filename_queue = tf.train.string_input_producer([filename])
     #filename_queue_test = tf.train.string_input_producer([filename_test], num_epochs = 3)
-    images, label = tool.read_and_decode(filename_queue)
+    images_batch, label_batch = tool.read_and_decode(filename, 150)
     #images_test, label_test = read_and_decode(filename_queue_test)
 
-    images_batch, label_batch = tf.train.shuffle_batch([images, label], batch_size=25, num_threads=1,capacity=1000 + 3 * 25, min_after_dequeue = 1000)
+    #images_batch, label_batch = tf.train.shuffle_batch([images, label], batch_size=200, num_threads=64,capacity=1000 + 3 * 200, min_after_dequeue = 1000)
     #images_test_batch, label_test_batch = tf.train.batch([images_test, label_test], batch_size = 125, num_threads = 64, capacity = 1000+3*15)
 
 #filename_test = os.path.join(train_dir, tfrecords_file_train)
 #images_test, label_test = read_and_decode(filename_test)
 
-x = tf.placeholder(tf.float32, [None, 28, 28, 1], name = "x")
+x = tf.placeholder(tf.float32, [None, 112, 112, 1], name = "x")
 tf.summary.image('input', x, 3)
 
   # Define loss and optimizer
@@ -135,7 +136,7 @@ with tf.name_scope('loss'):
   tf.summary.scalar("loss", cross_entropy)
 
 with tf.name_scope('adam_optimizer'):
-  train_step = tf.train.AdamOptimizer(1e-6).minimize(cross_entropy)
+  train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 
 with tf.name_scope('accuracy'):
   correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
@@ -151,27 +152,29 @@ summ = tf.summary.merge_all()
 #train_writer.add_graph(tf.get_default_graph())
 
 saver = tf.train.Saver(tf.global_variables())
-with tf.Session() as sess:
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+with tf.Session(config=config) as sess:
   sess.run(tf.global_variables_initializer())
   coord = tf.train.Coordinator()
   threads = tf.train.start_queue_runners(coord=coord)
   tra_summary_writer = tf.summary.FileWriter(train_log_dir)
   tra_summary_writer.add_graph(sess.graph)
   try:
-      for i in range(1000):
+      for i in range(5000):
           images, label = sess.run([images_batch, label_batch])
           #images_test, label_test = sess.run([images_test_batch, label_test_batch])
           #print(images, label)
           #images_test, label_test = sess.run([images_test, label_test])
           if i % 100 == 0:
-              train_accuracy = accuracy.eval(feed_dict={x: images, y_: label, keep_prob: 1.0})
+              train_accuracy = accuracy.eval(feed_dict={x: images, y_: label, keep_prob: 0.3})
               print('step %d, training accuracy %.4f' % (i, train_accuracy))
               #test_accuracy = accuracy.eval(feed_dict={x: images_test, y_: label_test, keep_prob: 1.0})
           _, tra_loss, summary = sess.run([train_step, cross_entropy, summ], feed_dict={x: images, y_: label})
           tra_summary_writer.add_summary(summary, i)
           if i % 100 == 0:
               print('step %d, loss %.4f' %(i, tra_loss))
-          if i % 2000 == 0 or (i + 1) == 20000:
+          if i % 1000 == 0 or (i + 1) == 6000:
               checkpoint_path = os.path.join(train_log_dir, 'model.ckpt')
               saver.save(sess, checkpoint_path, global_step=i)
   except tf.errors.OutOfRangeError:
